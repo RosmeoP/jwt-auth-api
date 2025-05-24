@@ -1,32 +1,20 @@
 import dotenv from 'dotenv';
+import { MongoClient } from 'mongodb';
+
 dotenv.config();
 
-import { MongoClient } from 'mongodb';
-import bcrypt from 'bcryptjs'; // ✅ correct import for bcryptjs
-
 const url = process.env.MONGO_URI;
+const dbName = 'mydb'; 
 
-const saltRounds = 10;
-const plainPassword = 'mauricio14$VR';
+let db = null;
 
-// Hash password before DB connection
-const hashedPassword = bcrypt.hashSync(plainPassword, saltRounds);
+export const connectDB = async () => {
+  if (db) return db;
 
-MongoClient.connect(url)
-  .then(client => {
-    console.log('Connected successfully');
+  const client = new MongoClient(url);
+  await client.connect();
+  console.log('MongoDB connected');
 
-    const dbo = client.db('mydb');
-    const myObj = {
-      email: 'vrosmeo@gmail.com',
-      password: hashedPassword
-    };
-
-    return dbo.collection('users').insertOne(myObj).then(() => {
-      console.log('1 document inserted with hashed password');
-      client.close();
-    });
-  })
-  .catch(error => {
-    console.error('Connection error:', error.message);
-  });
+  db = client.db(dbName);
+  return db;
+};
