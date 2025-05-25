@@ -6,6 +6,9 @@ import isLoggedIn from '../middleware/user.auth.js';
 
 const router = Router();
 
+
+
+
 /**
  * @swagger
  * /register:
