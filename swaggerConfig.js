@@ -1,5 +1,5 @@
-const swaggerJSDoc = require('swagger-jsdoc');
-const swaggerUi = require('swagger-ui-express');
+import swaggerJSDoc from 'swagger-jsdoc';
+import swaggerUi from 'swagger-ui-express';
 
 const options = {
   definition: {
@@ -23,18 +23,11 @@ const options = {
         },
       },
     },
-    security: [
-      {
-        bearerAuth: [],
-      },
-    ],
+    security: [{ bearerAuth: [] }],
   },
-  apis: ['./routes/*.js', './server.js'],
+  apis: ['./routes/*.js', './server.js'], 
 };
 
 const swaggerSpec = swaggerJSDoc(options);
 
-module.exports = {
-  swaggerUi,
-  swaggerSpec,
-};
+export { swaggerUi, swaggerSpec };
