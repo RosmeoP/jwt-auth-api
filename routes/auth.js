@@ -6,6 +6,35 @@ import isLoggedIn from '../middleware/user.auth.js';
 
 const router = Router();
 
+/**
+ * @swagger
+ * /register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User registered and token returned
+ *       400:
+ *         description: User already exists
+ *       500:
+ *         description: Server error
+ */
+
 router.post('/register', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -32,6 +61,34 @@ router.post('/register', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+/**
+ * @swagger
+ * /login:
+ *   post:
+ *     summary: Login user and return JWT
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *               - password
+ *             properties:
+ *               email:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: JWT returned
+ *       400:
+ *         description: Invalid credentials
+ *       500:
+ *         description: Server error
+ */
 
 router.post('/login', async (req, res) => {
   try {
@@ -57,6 +114,22 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+/**
+ * @swagger
+ * /profile:
+ *   get:
+ *     summary: Get user profile (protected)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Returns the user profile
+ *       401:
+ *         description: Unauthorized
+ */
+
 router.get('/profile', isLoggedIn, (req, res) => {
   res.json({
     message: 'Welcome to your profile',
@@ -67,4 +140,4 @@ router.get('/profile', isLoggedIn, (req, res) => {
   });
 });
 
-export default router; // ✅ Now it's at the very end
+export default router; 
