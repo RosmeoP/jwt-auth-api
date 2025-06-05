@@ -1,12 +1,12 @@
-
 # jwt-auth-api
 
-A robust and extensible RESTful API for user authentication and authorization using JSON Web Tokens (JWT), built with JavaScript. This API is designed to serve as a secure authentication layer for web or mobile applications, providing endpoints for registration, login, and access to protected resources.
+A robust and extensible RESTful API for user authentication and authorization using JSON Web Tokens (JWT), built with JavaScript. This API is designed to serve as a secure authentication layer for web or mobile applications, providing endpoints for registration, login, protected resources, and token refreshing.
 
 ## Features
 
 - User registration and login with secure password hashing
-- JWT-based authentication for stateless session management
+- JWT-based authentication (access & refresh tokens) for stateless session management
+- Token refresh endpoint to maintain sessions securely
 - Protected endpoints accessible only with valid tokens
 - Easy integration with front-end applications
 - Docker support for seamless deployment
@@ -17,6 +17,7 @@ A robust and extensible RESTful API for user authentication and authorization us
 - JWT (jsonwebtoken)
 - bcryptjs for password hashing
 - Docker for containerization
+- MongoDB and Mongoose for data persistence
 
 ## Getting Started
 
@@ -46,6 +47,7 @@ A robust and extensible RESTful API for user authentication and authorization us
    ```
    PORT=5000
    JWT_SECRET=your_jwt_secret
+   REFRESH_TOKEN_SECRET=your_refresh_secret
    DB_URL=your_database_url
    ```
 
@@ -73,19 +75,21 @@ The API will be available at `http://localhost:5000` by default.
 
 ## API Endpoints
 
-| Method | Endpoint         | Description                  | Auth Required |
-|--------|------------------|------------------------------|:------------:|
-| POST   | `/register`      | Register a new user          |      No      |
-| POST   | `/login`         | Authenticate user, returns JWT |   No      |
-| GET    | `/protected`     | Example protected route      |     Yes      |
+| Method | Endpoint             | Description                         | Auth Required |
+|--------|----------------------|-------------------------------------|:------------:|
+| POST   | `/register`          | Register a new user                 |      No      |
+| POST   | `/login`             | Authenticate user, returns tokens   |      No      |
+| POST   | `/refresh-token`     | Issue new access/refresh tokens     |      No*     |
+| GET    | `/protected`         | Example protected route             |     Yes      |
+| GET    | `/profile`           | Get user profile (protected)        |     Yes      |
 
-*(Further endpoints can be listed based on your implementation.)*
+> \* `/refresh-token` requires a valid refresh token in the request body.
 
 ### Example Usage
 
 **Register:**
 ```http
-POST /register
+POST /api/register
 Content-Type: application/json
 
 {
@@ -96,7 +100,7 @@ Content-Type: application/json
 
 **Login:**
 ```http
-POST /login
+POST /api/login
 Content-Type: application/json
 
 {
@@ -104,18 +108,53 @@ Content-Type: application/json
   "password": "yourpassword"
 }
 ```
+Response:
+```json
+{
+  "accessToken": "<jwt_access_token>",
+  "refreshToken": "<jwt_refresh_token>"
+}
+```
+
+**Refresh Token:**
+```http
+POST /api/refresh-token
+Content-Type: application/json
+
+{
+  "refreshToken": "<your_refresh_token>"
+}
+```
+Response:
+```json
+{
+  "accessToken": "<new_access_token>",
+  "refreshToken": "<new_refresh_token>"
+}
+```
 
 **Access Protected Route:**
 ```http
-GET /protected
-Authorization: Bearer <your_jwt_token>
+GET /api/protected
+Authorization: Bearer <your_access_token>
+```
+
+**Get Profile:**
+```http
+GET /api/profile
+Authorization: Bearer <your_access_token>
 ```
 
 ## Environment Variables
 
 - `PORT` — Port number the server will run on (default: 5000)
-- `JWT_SECRET` — Secret key for signing JWTs
+- `JWT_SECRET` — Secret key for signing access JWTs
+- `REFRESH_TOKEN_SECRET` — Secret key for signing refresh tokens
 - `DB_URL` — Database connection string
+
+## API Documentation
+
+Interactive Swagger docs are available at [http://localhost:5000/api-docs](http://localhost:5000/api-docs) when running locally.
 
 ## Contributing
 
