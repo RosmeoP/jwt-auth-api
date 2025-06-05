@@ -3,6 +3,7 @@ import User from '../models/user.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import isLoggedIn from '../middleware/user.auth.js'; 
+import { refreshTokenController } from '../controllers/authController.js';
 
 const router = Router();
 
@@ -48,6 +49,7 @@ router.post('/register', async (req, res) => {
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+
 
     const user = await User.create({
       email,
@@ -107,16 +109,30 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
+    const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+      expiresIn: '15m',
     });
 
-    res.json({ token });
+    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, {
+      expiresIn: '7d',
+    });
+
+    // ✅ Push refreshToken to the array
+    user.refreshTokens.push(refreshToken);
+    await user.save();
+
+    res.json({
+      accessToken,
+      refreshToken,
+    });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
+  
 });
+
+
 
 /**
  * @swagger
@@ -144,3 +160,9 @@ router.get('/profile', isLoggedIn, (req, res) => {
 });
 
 export default router; 
+
+
+// refresh token endpoint
+
+
+router.post('/refresh-token', refreshTokenController);
