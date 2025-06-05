@@ -7,9 +7,6 @@ import { refreshTokenController } from '../controllers/authController.js';
 
 const router = Router();
 
-
-
-
 /**
  * @swagger
  * /register:
@@ -50,7 +47,6 @@ router.post('/register', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
-
     const user = await User.create({
       email,
       password: hashedPassword,
@@ -66,6 +62,7 @@ router.post('/register', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 /**
  * @swagger
  * /login:
@@ -129,10 +126,49 @@ router.post('/login', async (req, res) => {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
-  
 });
 
+/**
+ * @swagger
+ * /refresh-token:
+ *   post:
+ *     summary: Refresh the access token using the refresh token
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - refreshToken
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *                 description: The refresh token received from the login endpoint
+ *     responses:
+ *       200:
+ *         description: New access token and refresh token returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken:
+ *                   type: string
+ *                   description: New access token
+ *                 refreshToken:
+ *                   type: string
+ *                   description: New refresh token
+ *       400:
+ *         description: Refresh token required
+ *       403:
+ *         description: Invalid or expired refresh token
+ *       500:
+ *         description: Server error
+ */
 
+router.post('/refresh-token', refreshTokenController);
 
 /**
  * @swagger
@@ -159,10 +195,4 @@ router.get('/profile', isLoggedIn, (req, res) => {
   });
 });
 
-export default router; 
-
-
-// refresh token endpoint
-
-
-router.post('/refresh-token', refreshTokenController);
+export default router;
