@@ -1,5 +1,5 @@
 import jwt from 'jsonwebtoken';
-import User from '../models/user.js'; 
+import User from '../models/user.js';
 
 const isLoggedIn = async (req, res, next) => {
   try {
@@ -24,9 +24,9 @@ const isLoggedIn = async (req, res, next) => {
 
     req.user = user;
     next();
-  } catch (err) {
-    if (err.name === 'JsonWebTokenError') {
-      return res.status(401).json({ error: 'Invalid token provided' });
+  } catch (error) {  // Use the correct variable `error` here
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid or expired token' });
     }
     res.status(500).json({ error: 'Internal server error' });
   }

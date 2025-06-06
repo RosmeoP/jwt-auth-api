@@ -38,16 +38,22 @@ const router = Router();
 
 router.post('/register', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const {name,  email, password } = req.body;
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: 'User already exists with this email' });
     }
+
+    if (!name || !email ||!password) {
+    return res.status(400).json({ message: 'All fields are required.' });
+  }
+
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
+      name,
       email,
       password: hashedPassword,
     });
@@ -59,9 +65,15 @@ router.post('/register', async (req, res) => {
     res.status(201).json({ token });
   } catch (error) {
     console.error('Register error:', error);
+    
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Duplicate key error, email must be unique' });
+    }
+
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 /**
  * @swagger
@@ -96,13 +108,17 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ email });
+    const trimmedEmail = email.trim().toLowerCase();
+    
+    const user = await User.findOne({ email: trimmedEmail });
     if (!user) {
+      console.log("User not found:", email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      console.log("Password mismatch for:", email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
@@ -114,7 +130,6 @@ router.post('/login', async (req, res) => {
       expiresIn: '7d',
     });
 
-    // ✅ Push refreshToken to the array
     user.refreshTokens.push(refreshToken);
     await user.save();
 
@@ -127,6 +142,7 @@ router.post('/login', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 /**
  * @swagger
@@ -184,15 +200,17 @@ router.post('/refresh-token', refreshTokenController);
  *       401:
  *         description: Unauthorized
  */
-
 router.get('/profile', isLoggedIn, (req, res) => {
   res.json({
     message: 'Welcome to your profile',
     user: {
       id: req.user._id,
-      email: req.user.email
-    }
+      email: req.user.email,
+      name: req.user.name, 
+    },
   });
 });
+
+
 
 export default router;
