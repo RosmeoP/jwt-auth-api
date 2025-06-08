@@ -10,10 +10,8 @@ export const refreshTokenController = async (req, res) => {
 
 
   try {
-    // Verify the refresh token
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
 
-    // Find the user by decoded ID
     const user = await User.findById(decoded.id);
     if (!user) {
       return res.status(403).json({ message: 'User not found' });
