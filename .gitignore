@@ -18,3 +18,5 @@ Thumbs.db
 # Dependency directories
 venv/
 __pycache__/
+
+# Environment
