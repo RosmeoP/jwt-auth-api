@@ -4,8 +4,22 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import isLoggedIn from '../middleware/user.auth.js'; 
 import { refreshTokenController } from '../controllers/authController.js';
+import passport from '../config/passport.js';
 
 const router = Router();
+
+// Helper function to generate tokens
+const generateTokens = (userId) => {
+  const accessToken = jwt.sign({ id: userId }, process.env.JWT_SECRET, {
+    expiresIn: '15m',
+  });
+  
+  const refreshToken = jwt.sign({ id: userId }, process.env.REFRESH_TOKEN_SECRET, {
+    expiresIn: '7d',
+  });
+  
+  return { accessToken, refreshToken };
+};
 
 /**
  * @swagger
@@ -38,31 +52,37 @@ const router = Router();
 
 router.post('/register', async (req, res) => {
   try {
-    const {name,  email, password } = req.body;
+    const { name, email, password } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'All fields are required.' });
+    }
+
+    const existingUser = await User.findOne({ email: email.trim().toLowerCase() });
     if (existingUser) {
       return res.status(400).json({ message: 'User already exists with this email' });
     }
-
-    if (!name || !email ||!password) {
-    return res.status(400).json({ message: 'All fields are required.' });
-  }
-
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const user = await User.create({
       name,
-      email,
+      email: email.trim().toLowerCase(),
       password: hashedPassword,
+      authProvider: 'local'
     });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: '1h',
-    });
+    const { accessToken, refreshToken } = generateTokens(user._id);
 
-    res.status(201).json({ token });
+    // Add refresh token to user
+    user.refreshTokens.push(refreshToken);
+    await user.save();
+
+    res.status(201).json({ 
+      accessToken,
+      refreshToken,
+      user: user.toPublic()
+    });
   } catch (error) {
     console.error('Register error:', error);
     
@@ -73,7 +93,6 @@ router.post('/register', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
-
 
 /**
  * @swagger
@@ -116,19 +135,24 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      console.log("Password mismatch for:", email);
-      return res.status(400).json({ message: 'Invalid email or password' });
+    // Check if user is using Google OAuth
+    if (user.authProvider === 'google' && !user.password) {
+      return res.status(400).json({ 
+        message: 'Please use Google Sign-In for this account',
+        useGoogleAuth: true
+      });
     }
 
-    const accessToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
-      expiresIn: '15m',
-    });
+    // For local auth users, check password
+    if (user.authProvider === 'local' || user.password) {
+      const isMatch = await user.comparePassword(password);
+      if (!isMatch) {
+        console.log("Password mismatch for:", email);
+        return res.status(400).json({ message: 'Invalid email or password' });
+      }
+    }
 
-    const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, {
-      expiresIn: '7d',
-    });
+    const { accessToken, refreshToken } = generateTokens(user._id);
 
     user.refreshTokens.push(refreshToken);
     await user.save();
@@ -136,13 +160,13 @@ router.post('/login', async (req, res) => {
     res.json({
       accessToken,
       refreshToken,
+      user: user.toPublic()
     });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
-
 
 /**
  * @swagger
@@ -165,17 +189,6 @@ router.post('/login', async (req, res) => {
  *     responses:
  *       200:
  *         description: New access token and refresh token returned
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 accessToken:
- *                   type: string
- *                   description: New access token
- *                 refreshToken:
- *                   type: string
- *                   description: New refresh token
  *       400:
  *         description: Refresh token required
  *       403:
@@ -203,14 +216,98 @@ router.post('/refresh-token', refreshTokenController);
 router.get('/profile', isLoggedIn, (req, res) => {
   res.json({
     message: 'Welcome to your profile',
-    user: {
+    user: req.user.toPublic ? req.user.toPublic() : {
       id: req.user._id,
       email: req.user.email,
-      name: req.user.name, 
+      name: req.user.name,
+      profilePicture: req.user.profilePicture,
+      authProvider: req.user.authProvider
     },
   });
 });
 
+/**
+ * @swagger
+ * /auth/google:
+ *   get:
+ *     summary: Authenticate with Google
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Google authentication successful
+ *       500:
+ *         description: Server error
+ */
 
+router.get(
+  '/google',
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+/**
+ * @swagger
+ * /auth/google/callback:
+ *   get:
+ *     summary: Google authentication callback
+ *     tags: [Auth]
+ *     responses:
+ *       200:
+ *         description: Google authentication successful, JWT returned
+ *       500:
+ *         description: Server error
+ */
+
+router.get(
+  '/google/callback',
+  passport.authenticate('google', { session: false, failureRedirect: '/' }),
+  async (req, res) => {
+    try {
+      if (!req.user) {
+        throw new Error('No user data received from Google');
+      }
+
+      const { accessToken, refreshToken } = generateTokens(req.user._id);
+
+      req.user.refreshTokens.push(refreshToken);
+      await req.user.save();
+
+      const userData = {
+        id: req.user._id,
+        name: req.user.name,
+        email: req.user.email,
+        profilePicture: req.user.profilePicture,
+        authProvider: req.user.authProvider
+      };
+
+      const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const redirectURL = `${frontendURL}/login?token=${accessToken}&refreshToken=${refreshToken}&user=${encodeURIComponent(JSON.stringify(userData))}`;
+      
+      res.redirect(redirectURL);
+    } catch (error) {
+      console.error('Google OAuth callback error:', error);
+      const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173';
+      const errorURL = `${frontendURL}/login?error=${encodeURIComponent('Authentication failed. Please try again.')}`;
+      res.redirect(errorURL);
+    }
+  }
+);
+
+// Logout route
+router.post('/logout', isLoggedIn, async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    
+    if (refreshToken) {
+      const user = await User.findById(req.user.id);
+      user.refreshTokens = user.refreshTokens.filter(token => token !== refreshToken);
+      await user.save();
+    }
+    
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ message: 'Logout failed' });
+  }
+});
 
 export default router;
