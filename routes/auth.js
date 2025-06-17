@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import isLoggedIn from '../middleware/user.auth.js'; 
 import { refreshTokenController } from '../controllers/authController.js';
 import passport from '../config/passport.js';
+import { sendVerificationEmail, sendWelcomeEmail, verifyEmailToken } from '../services/emailService.js';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ const generateTokens = (userId) => {
  * @swagger
  * /register:
  *   post:
- *     summary: Register a new user
+ *     summary: Register a new user (requires email verification)
  *     tags: [Auth]
  *     requestBody:
  *       required: true
@@ -34,18 +35,21 @@ const generateTokens = (userId) => {
  *           schema:
  *             type: object
  *             required:
+ *               - name
  *               - email
  *               - password
  *             properties:
+ *               name:
+ *                 type: string
  *               email:
  *                 type: string
  *               password:
  *                 type: string
  *     responses:
  *       201:
- *         description: User registered and token returned
+ *         description: User registered, verification email sent
  *       400:
- *         description: User already exists
+ *         description: Validation error or user already exists
  *       500:
  *         description: Server error
  */
@@ -58,39 +62,218 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ message: 'All fields are required.' });
     }
 
-    const existingUser = await User.findOne({ email: email.trim().toLowerCase() });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists with this email' });
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters long.' });
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Create unverified user
+    const user = await User.createUnverifiedUser({ name, email, password });
 
-    const user = await User.create({
-      name,
-      email: email.trim().toLowerCase(),
-      password: hashedPassword,
-      authProvider: 'local'
-    });
+    // Send verification email
+    try {
+      await sendVerificationEmail(user);
+      
+      res.status(201).json({ 
+        message: 'Registration successful! Please check your email to verify your account.',
+        requiresVerification: true,
+        email: user.email
+      });
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      
+      // Delete the user if email sending fails
+      await User.findByIdAndDelete(user._id);
+      
+      res.status(500).json({ 
+        message: 'Registration failed. Unable to send verification email. Please try again.' 
+      });
+    }
 
-    const { accessToken, refreshToken } = generateTokens(user._id);
-
-    // Add refresh token to user
-    user.refreshTokens.push(refreshToken);
-    await user.save();
-
-    res.status(201).json({ 
-      accessToken,
-      refreshToken,
-      user: user.toPublic()
-    });
   } catch (error) {
     console.error('Register error:', error);
     
     if (error.code === 11000) {
-      return res.status(400).json({ message: 'Duplicate key error, email must be unique' });
+      return res.status(400).json({ message: 'User already exists with this email.' });
     }
 
-    res.status(500).json({ message: 'Server error' });
+    if (error.message === 'User already exists with this email') {
+      return res.status(400).json({ message: error.message });
+    }
+
+    res.status(500).json({ message: 'Server error during registration.' });
+  }
+});
+
+/**
+ * @swagger
+ * /verify-email:
+ *   post:
+ *     summary: Verify user email with token
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Email verified successfully, JWT tokens returned
+ *       400:
+ *         description: Invalid or expired token
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+
+router.post('/verify-email', async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ message: 'Verification token is required.' });
+    }
+
+    // Verify the token
+    const decoded = verifyEmailToken(token);
+    
+    // Find the user
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    // Check if email matches
+    if (user.email !== decoded.email) {
+      return res.status(400).json({ message: 'Invalid verification token.' });
+    }
+
+    // Check if already verified
+    if (user.emailVerified) {
+      return res.status(400).json({ 
+        message: 'Email is already verified.',
+        alreadyVerified: true
+      });
+    }
+
+    // Mark email as verified
+    await user.markEmailAsVerified();
+
+    // Send welcome email
+    try {
+      await sendWelcomeEmail(user);
+    } catch (emailError) {
+      console.error('Failed to send welcome email:', emailError);
+      // Don't fail the verification if welcome email fails
+    }
+
+    // Generate tokens for immediate login
+    const { accessToken, refreshToken } = generateTokens(user._id);
+
+    // Add refresh token to user
+    user.refreshTokens.push(refreshToken);
+    user.lastLoginAt = new Date();
+    await user.save();
+
+    res.json({
+      message: 'Email verified successfully! Welcome to KashKeeper!',
+      accessToken,
+      refreshToken,
+      user: user.toPublic()
+    });
+
+  } catch (error) {
+    console.error('Email verification error:', error);
+    
+    if (error.message.includes('Invalid or expired')) {
+      return res.status(400).json({ 
+        message: 'Invalid or expired verification token. Please request a new verification email.',
+        expired: true
+      });
+    }
+
+    res.status(500).json({ message: 'Server error during email verification.' });
+  }
+});
+
+/**
+ * @swagger
+ * /resend-verification:
+ *   post:
+ *     summary: Resend email verification
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Verification email sent
+ *       400:
+ *         description: Email already verified or invalid
+ *       404:
+ *         description: User not found
+ *       429:
+ *         description: Too many requests
+ *       500:
+ *         description: Server error
+ */
+
+router.post('/resend-verification', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required.' });
+    }
+
+    // Find the user
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      return res.status(404).json({ message: 'No account found with this email address.' });
+    }
+
+    // Check if already verified
+    if (user.emailVerified) {
+      return res.status(400).json({ 
+        message: 'Email is already verified.',
+        alreadyVerified: true
+      });
+    }
+
+    // Rate limiting check (optional)
+    const lastVerificationSent = user.emailVerificationExpires;
+    if (lastVerificationSent && (new Date() - lastVerificationSent) < 60000) { // 1 minute
+      return res.status(429).json({ 
+        message: 'Please wait before requesting another verification email.',
+        waitTime: 60
+      });
+    }
+
+    // Send new verification email
+    await sendVerificationEmail(user);
+
+    res.json({ 
+      message: 'Verification email sent! Please check your inbox.',
+      email: user.email
+    });
+
+  } catch (error) {
+    console.error('Resend verification error:', error);
+    res.status(500).json({ message: 'Failed to send verification email. Please try again.' });
   }
 });
 
@@ -118,7 +301,7 @@ router.post('/register', async (req, res) => {
  *       200:
  *         description: JWT returned
  *       400:
- *         description: Invalid credentials
+ *         description: Invalid credentials or email not verified
  *       500:
  *         description: Server error
  */
@@ -131,14 +314,13 @@ router.post('/login', async (req, res) => {
     
     const user = await User.findOne({ email: trimmedEmail });
     if (!user) {
-      console.log("User not found:", email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
     // Check if user is using Google OAuth
     if (user.authProvider === 'google' && !user.password) {
       return res.status(400).json({ 
-        message: 'Please use Google Sign-In for this account',
+        message: 'This account uses Google Sign-In. Please use the Google button below.',
         useGoogleAuth: true
       });
     }
@@ -147,14 +329,23 @@ router.post('/login', async (req, res) => {
     if (user.authProvider === 'local' || user.password) {
       const isMatch = await user.comparePassword(password);
       if (!isMatch) {
-        console.log("Password mismatch for:", email);
         return res.status(400).json({ message: 'Invalid email or password' });
       }
+    }
+
+    // Check if email is verified
+    if (!user.emailVerified) {
+      return res.status(400).json({ 
+        message: 'Please verify your email address before logging in.',
+        requiresVerification: true,
+        email: user.email
+      });
     }
 
     const { accessToken, refreshToken } = generateTokens(user._id);
 
     user.refreshTokens.push(refreshToken);
+    user.lastLoginAt = new Date();
     await user.save();
 
     res.json({
@@ -162,9 +353,10 @@ router.post('/login', async (req, res) => {
       refreshToken,
       user: user.toPublic()
     });
+
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error during login.' });
   }
 });
 
@@ -174,27 +366,6 @@ router.post('/login', async (req, res) => {
  *   post:
  *     summary: Refresh the access token using the refresh token
  *     tags: [Auth]
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - refreshToken
- *             properties:
- *               refreshToken:
- *                 type: string
- *                 description: The refresh token received from the login endpoint
- *     responses:
- *       200:
- *         description: New access token and refresh token returned
- *       400:
- *         description: Refresh token required
- *       403:
- *         description: Invalid or expired refresh token
- *       500:
- *         description: Server error
  */
 
 router.post('/refresh-token', refreshTokenController);
@@ -207,11 +378,6 @@ router.post('/refresh-token', refreshTokenController);
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
- *     responses:
- *       200:
- *         description: Returns the user profile
- *       401:
- *         description: Unauthorized
  */
 router.get('/profile', isLoggedIn, (req, res) => {
   res.json({
@@ -221,7 +387,8 @@ router.get('/profile', isLoggedIn, (req, res) => {
       email: req.user.email,
       name: req.user.name,
       profilePicture: req.user.profilePicture,
-      authProvider: req.user.authProvider
+      authProvider: req.user.authProvider,
+      emailVerified: req.user.emailVerified
     },
   });
 });
@@ -232,11 +399,6 @@ router.get('/profile', isLoggedIn, (req, res) => {
  *   get:
  *     summary: Authenticate with Google
  *     tags: [Auth]
- *     responses:
- *       200:
- *         description: Google authentication successful
- *       500:
- *         description: Server error
  */
 
 router.get(
@@ -250,11 +412,6 @@ router.get(
  *   get:
  *     summary: Google authentication callback
  *     tags: [Auth]
- *     responses:
- *       200:
- *         description: Google authentication successful, JWT returned
- *       500:
- *         description: Server error
  */
 
 router.get(
@@ -276,7 +433,8 @@ router.get(
         name: req.user.name,
         email: req.user.email,
         profilePicture: req.user.profilePicture,
-        authProvider: req.user.authProvider
+        authProvider: req.user.authProvider,
+        emailVerified: req.user.emailVerified
       };
 
       const frontendURL = process.env.FRONTEND_URL || 'http://localhost:5173';
