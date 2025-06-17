@@ -4,7 +4,14 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import session from 'express-session';
 import dotenv from 'dotenv';
+// ADD THESE SWAGGER IMPORTS
+import swaggerJSDoc from 'swagger-jsdoc';
+import swaggerUi from 'swagger-ui-express';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const app = express();
 
 dotenv.config();
@@ -29,6 +36,41 @@ const passport = passportModule.default;
 
 const authModule = await import('./routes/auth.js');
 const authRoutes = authModule.default;
+
+// ADD SWAGGER CONFIGURATION
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'JWT Auth API',
+      version: '1.0.0',
+      description: 'Authentication API with JWT and email verification',
+    },
+    servers: [
+      {
+        url: 'https://jwt-auth-api-650a.onrender.com',
+        description: 'Production server'
+      },
+      {
+        url: 'http://localhost:3000',
+        description: 'Development server'
+      }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Enter your access token'
+        },
+      },
+    },
+  },
+  apis: ['./routes/*.js'], // This will pick up your auth.js route documentation
+};
+
+const swaggerSpec = swaggerJSDoc(swaggerOptions);
 
 // Connect to MongoDB
 try {
@@ -63,10 +105,32 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Routes
+app.get('/api-docs', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'api-docs.html'));
+});
+
+// SERVE ACTUAL SWAGGER DOCS AT /api-docs/swagger
+app.use('/api-docs/swagger', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// ADD ROOT ROUTE FOR EASIER DEBUGGING
+app.get('/', (req, res) => {
+  res.json({
+    message: 'JWT Auth API is running! 🚀',
+    version: '1.0.0',
+    documentation: '/api-docs',
+    endpoints: {
+      docs: '/api-docs',
+      test: '/test',
+      auth: '/auth'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Routes (your existing routes stay the same)
 app.use('/auth', authRoutes);
 
-// Test route
+// Test route (unchanged)
 app.get('/test', (req, res) => {
   res.json({
     message: 'Server is working!',
@@ -79,7 +143,7 @@ app.get('/test', (req, res) => {
   });
 });
 
-// Error handling
+// Error handling (unchanged)
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({ error: 'Internal server error' });
@@ -89,6 +153,7 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`📚 Swagger docs available at: http://localhost:${PORT}/api-docs`);
 });
 
 export default app;
