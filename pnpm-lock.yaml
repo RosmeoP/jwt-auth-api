@@ -35,6 +35,9 @@ importers:
       node:
         specifier: ^22.16.0
         version: 22.16.0
+      nodemailer:
+        specifier: ^7.0.3
+        version: 7.0.3
       passport:
         specifier: ^0.7.0
         version: 0.7.0
@@ -502,6 +505,10 @@ packages:
     resolution: {integrity: sha512-rJlZ29rJLShrkDJrvLUfuxMJT5in2o1C0PhOPjZI9yHnctqk9m85sSyoAdhkN98Xb14NeobmCiIKFWqT2E1+bA==}
     engines: {npm: '>=5.0.0'}
     hasBin: true
+
+  nodemailer@7.0.3:
+    resolution: {integrity: sha512-Ajq6Sz1x7cIK3pN6KesGTah+1gnwMnx5gKl3piQlQQE/PwyJ4Mbc8is2psWYxK3RJTVeqsDaCv8ZzXLCDHMTZw==}
+    engines: {node: '>=6.0.0'}
 
   nodemon@3.1.10:
     resolution: {integrity: sha512-WDjw3pJ0/0jMFmyNDp3gvY2YizjLmmOUQo6DEBY+JgdvW/yQ9mEeSw6H5ythl5Ny2ytb7f9C2nIbjSxMNzbJXw==}
@@ -1206,6 +1213,8 @@ snapshots:
   node@22.16.0:
     dependencies:
       node-bin-setup: 1.1.4
+
+  nodemailer@7.0.3: {}
 
   nodemon@3.1.10:
     dependencies:

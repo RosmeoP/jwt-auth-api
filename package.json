@@ -21,6 +21,7 @@
     "mongodb": "^6.16.0",
     "mongoose": "^8.15.0",
     "node": "^22.16.0",
+    "nodemailer": "^7.0.3",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "swagger-ui-express": "^5.0.1"
