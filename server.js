@@ -105,15 +105,13 @@ app.use(session({
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.get('/api-docs', (req, res) => {
+app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'api-docs.html'));
 });
 
-// SERVE ACTUAL SWAGGER DOCS AT /api-docs/swagger
-app.use('/api-docs/swagger', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
-// ADD ROOT ROUTE FOR EASIER DEBUGGING
-app.get('/', (req, res) => {
+app.get('/info', (req, res) => {
   res.json({
     message: 'JWT Auth API is running! 🚀',
     version: '1.0.0',
@@ -121,16 +119,16 @@ app.get('/', (req, res) => {
     endpoints: {
       docs: '/api-docs',
       test: '/test',
-      auth: '/auth'
+      auth: '/auth',
+      info: '/info'
     },
     timestamp: new Date().toISOString()
   });
 });
 
-// Routes (your existing routes stay the same)
+
 app.use('/auth', authRoutes);
 
-// Test route (unchanged)
 app.get('/test', (req, res) => {
   res.json({
     message: 'Server is working!',
@@ -143,7 +141,6 @@ app.get('/test', (req, res) => {
   });
 });
 
-// Error handling (unchanged)
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
   res.status(500).json({ error: 'Internal server error' });
