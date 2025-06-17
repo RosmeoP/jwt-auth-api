@@ -17,7 +17,6 @@ const userSchema = new Schema({
   },
   password: {
     type: String,
-    // Password is only required for local auth users, not Google OAuth users
     required: function() {
       return !this.googleId;
     }
@@ -29,7 +28,7 @@ const userSchema = new Schema({
   googleId: { 
     type: String, 
     unique: true, 
-    sparse: true // Allows multiple null values
+    sparse: true
   },
   profilePicture: {
     type: String,
@@ -48,7 +47,7 @@ const userSchema = new Schema({
   timestamps: true
 });
 
-// Instance method to compare passwords (for local auth)
+// Instance method to compare passwords
 userSchema.methods.comparePassword = async function(candidatePassword) {
   if (!this.password) return false;
   return bcrypt.compare(candidatePassword, this.password);
@@ -78,14 +77,16 @@ userSchema.statics.findOrCreateGoogleUser = async function(profile) {
     }
     
     // Check if user exists with same email
-    user = await this.findOne({ email: profile.emails[0].value });
+    user = await this.findOne({ email: profile.emails[0].value.toLowerCase() });
     
     if (user) {
       // Link Google account to existing user
       user.googleId = profile.id;
       user.profilePicture = user.profilePicture || profile.photos[0]?.value;
       user.emailVerified = true;
-      user.authProvider = user.authProvider === 'local' ? 'local' : 'google';
+      if (user.authProvider !== 'local') {
+        user.authProvider = 'google';
+      }
       await user.save();
       return user;
     }
@@ -94,7 +95,7 @@ userSchema.statics.findOrCreateGoogleUser = async function(profile) {
     user = await this.create({
       googleId: profile.id,
       name: profile.displayName,
-      email: profile.emails[0].value,
+      email: profile.emails[0].value.toLowerCase(),
       profilePicture: profile.photos[0]?.value,
       emailVerified: true,
       authProvider: 'google'
@@ -106,7 +107,6 @@ userSchema.statics.findOrCreateGoogleUser = async function(profile) {
   }
 };
 
-// Prevent model recompilation in development
 const User = mongoose.models.User || mongoose.model('User', userSchema);
 
 export default User;
