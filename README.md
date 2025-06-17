@@ -1,13 +1,17 @@
+
 # jwt-auth-api
 
-A robust and extensible RESTful API for user authentication and authorization using JSON Web Tokens (JWT), built with JavaScript. This API is designed to serve as a secure authentication layer for web or mobile applications, providing endpoints for registration, login, protected resources, and token refreshing.
+A robust and extensible RESTful API for user authentication and authorization using JSON Web Tokens (JWT) and MongoDB, built with JavaScript. This API is designed to serve as a secure authentication layer for modern web and mobile applications, supporting both classic email/password login and Google OAuth. It also features email verification for new accounts.
 
 ## Features
 
 - User registration and login with secure password hashing
 - JWT-based authentication (access & refresh tokens) for stateless session management
 - Token refresh endpoint to maintain sessions securely
+- Google OAuth login for seamless third-party authentication
+- Email verification for new user accounts
 - Protected endpoints accessible only with valid tokens
+- User profile endpoint
 - Easy integration with front-end applications
 - Docker support for seamless deployment
 
@@ -16,8 +20,10 @@ A robust and extensible RESTful API for user authentication and authorization us
 - JavaScript (Node.js, Express)
 - JWT (jsonwebtoken)
 - bcryptjs for password hashing
-- Docker for containerization
 - MongoDB and Mongoose for data persistence
+- Google OAuth (passport-google-oauth20)
+- Nodemailer for email verification
+- Docker for containerization
 
 ## Getting Started
 
@@ -26,6 +32,8 @@ A robust and extensible RESTful API for user authentication and authorization us
 - [Node.js](https://nodejs.org/) (v14+ recommended)
 - [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
 - [Docker](https://www.docker.com/) (optional, for containerized deployment)
+- Google Cloud OAuth credentials (for Google auth features)
+- SMTP credentials (for email verification)
 
 ### Installation
 
@@ -49,6 +57,14 @@ A robust and extensible RESTful API for user authentication and authorization us
    JWT_SECRET=your_jwt_secret
    REFRESH_TOKEN_SECRET=your_refresh_secret
    DB_URL=your_database_url
+   GOOGLE_CLIENT_ID=your_google_client_id
+   GOOGLE_CLIENT_SECRET=your_google_client_secret
+   GOOGLE_CALLBACK_URL=your_google_callback_url
+   SMTP_HOST=your_smtp_host
+   SMTP_PORT=your_smtp_port
+   SMTP_USER=your_smtp_user
+   SMTP_PASS=your_smtp_pass
+   EMAIL_FROM=your_email_address
    ```
 
 ### Running Locally
@@ -75,13 +91,16 @@ The API will be available at `http://localhost:5000` by default.
 
 ## API Endpoints
 
-| Method | Endpoint             | Description                         | Auth Required |
-|--------|----------------------|-------------------------------------|:------------:|
-| POST   | `/register`          | Register a new user                 |      No      |
-| POST   | `/login`             | Authenticate user, returns tokens   |      No      |
-| POST   | `/refresh-token`     | Issue new access/refresh tokens     |      No*     |
-| GET    | `/protected`         | Example protected route             |     Yes      |
-| GET    | `/profile`           | Get user profile (protected)        |     Yes      |
+| Method | Endpoint                 | Description                                 | Auth Required |
+|--------|--------------------------|---------------------------------------------|:------------:|
+| POST   | `/register`              | Register a new user (email verification)    |      No      |
+| POST   | `/login`                 | Authenticate user, returns tokens           |      No      |
+| POST   | `/refresh-token`         | Issue new access/refresh tokens             |      No*     |
+| GET    | `/protected`             | Example protected route                     |     Yes      |
+| GET    | `/profile`               | Get user profile (protected)                |     Yes      |
+| GET    | `/auth/google`           | Start Google OAuth flow                     |      No      |
+| GET    | `/auth/google/callback`  | Google OAuth callback URL                   |      No      |
+| GET    | `/verify-email/:token`   | Verify user email                           |      No      |
 
 > \* `/refresh-token` requires a valid refresh token in the request body.
 
@@ -93,10 +112,14 @@ POST /api/register
 Content-Type: application/json
 
 {
-  "email": "youruser",
+  "email": "youruser@example.com",
   "password": "yourpassword"
 }
 ```
+> You will receive a verification email.
+
+**Verify Email:**  
+Click the verification link sent to your email.
 
 **Login:**
 ```http
@@ -104,7 +127,7 @@ POST /api/login
 Content-Type: application/json
 
 {
-  "email": "youruser",
+  "email": "youruser@example.com",
   "password": "yourpassword"
 }
 ```
@@ -115,6 +138,9 @@ Response:
   "refreshToken": "<jwt_refresh_token>"
 }
 ```
+
+**Google OAuth Login:**  
+Visit `/api/auth/google` to start the flow.
 
 **Refresh Token:**
 ```http
@@ -150,7 +176,11 @@ Authorization: Bearer <your_access_token>
 - `PORT` — Port number the server will run on (default: 5000)
 - `JWT_SECRET` — Secret key for signing access JWTs
 - `REFRESH_TOKEN_SECRET` — Secret key for signing refresh tokens
-- `DB_URL` — Database connection string
+- `DB_URL` — MongoDB connection string
+- `GOOGLE_CLIENT_ID` — Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET` — Google OAuth client secret
+- `GOOGLE_CALLBACK_URL` — Google OAuth callback URL
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` — Required for email verification
 
 ## API Documentation
 
@@ -164,6 +194,7 @@ Contributions are welcome! Please open an issue or submit a pull request for imp
 
 This project is licensed under the MIT License.
 
----
 
-Feel free to modify and expand this template according to the specifics of your jwt-auth-api! If you have more unique instructions or additional features, let me know and I can further tailor the README.
+
+
+
