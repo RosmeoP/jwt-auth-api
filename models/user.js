@@ -117,9 +117,8 @@ userSchema.statics.findOrCreateGoogleUser = async function(profile) {
       user.emailVerifiedAt = user.emailVerifiedAt || new Date();
       user.lastLoginAt = new Date();
       
-      if (user.authProvider !== 'local') {
-        user.authProvider = 'google';
-      }
+      // Always update to google auth provider when linking Google account
+      user.authProvider = 'google';
       await user.save();
       return user;
     }
