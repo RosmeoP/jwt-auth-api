@@ -198,7 +198,6 @@ export const sendWelcomeEmail = async (user) => {
     };
     await transporter.sendMail(mailOptions);
   } catch (error) {
-    // Don't throw error - welcome email is not critical
   }
 };
 
