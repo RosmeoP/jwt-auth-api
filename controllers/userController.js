@@ -82,7 +82,6 @@ export const loginUser = async (req, res) => {
       }
     }
 
-    // Check if email is verified
     if (!user.emailVerified) {
       return res.status(400).json({ 
         message: 'Please verify your email address before logging in.',
@@ -124,7 +123,6 @@ export const getUserProfile = (req, res) => {
   });
 };
 
-// Logout user
 export const logoutUser = async (req, res) => {
   try {
     const { refreshToken } = req.body;
@@ -142,7 +140,6 @@ export const logoutUser = async (req, res) => {
   }
 };
 
-// Update user email
 export const updateUserEmail = async (req, res) => {
   try {
     const { email } = req.body;
@@ -167,23 +164,19 @@ export const updateUserEmail = async (req, res) => {
 
     const trimmedEmail = normalizeEmail(email);
 
-    // Validate email format
     if (!isValidEmail(trimmedEmail)) {
       return res.status(400).json({ message: 'Please enter a valid email address' });
     }
 
-    // Check if email is the same as current
     if (user.email === trimmedEmail) {
       return res.status(400).json({ message: 'This is already your current email address' });
     }
 
-    // Check if email already exists
     const existingUser = await User.findOne({ email: trimmedEmail });
     if (existingUser) {
       return res.status(409).json({ message: 'An account with this email already exists' });
     }
 
-    // Update email and mark as unverified
     user.email = trimmedEmail;
     user.emailVerified = false;
     user.emailVerifiedAt = null;
@@ -194,7 +187,6 @@ export const updateUserEmail = async (req, res) => {
       await sendVerificationEmail(user);
     } catch (emailError) {
       console.error('Failed to send verification email:', emailError);
-      // Don't fail the update if email sending fails
     }
 
     res.json({ 
