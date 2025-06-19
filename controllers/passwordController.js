@@ -2,7 +2,6 @@ import User from '../models/user.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
 import { normalizeEmail, validatePassword } from '../utils/authUtils.js';
 
-// Request password reset
 export const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
@@ -13,10 +12,8 @@ export const forgotPassword = async (req, res) => {
 
     const trimmedEmail = normalizeEmail(email);
 
-    // Find user by email
     const user = await User.findOne({ email: trimmedEmail });
     if (!user) {
-      // Don't reveal if email exists or not for security
       return res.json({ 
         message: 'If an account with that email exists, we have sent a password reset link.' 
       });
@@ -29,11 +26,9 @@ export const forgotPassword = async (req, res) => {
       });
     }
 
-    // Generate password reset token
     const resetToken = user.createPasswordResetToken();
     await user.save();
 
-    // Send password reset email
     try {
       await sendPasswordResetEmail(user, resetToken);
       
@@ -89,8 +84,7 @@ export const resetPassword = async (req, res) => {
       });
     }
 
-    // Update password and clear reset token
-    user.password = password; // Will be hashed by the pre-save hook
+    user.password = password; 
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save();

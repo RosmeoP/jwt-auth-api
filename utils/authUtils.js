@@ -37,9 +37,8 @@ export const normalizeEmail = (email) => {
 };
 
 /**
- * Check if password meets minimum requirements
- * @param {string} password - Password to validate
- * @returns {Object} Object with isValid boolean and message string
+ * @param {string} password 
+ * @returns {Object} 
  */
 export const validatePassword = (password) => {
   if (!password) {
