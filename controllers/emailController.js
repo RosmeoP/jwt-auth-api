@@ -11,7 +11,6 @@ export const verifyEmail = async (req, res) => {
       return res.status(400).json({ message: 'Verification token is required.' });
     }
 
-    // Verify the token
     const decoded = verifyEmailToken(token);
     
     // Find the user
@@ -20,12 +19,10 @@ export const verifyEmail = async (req, res) => {
       return res.status(404).json({ message: 'User not found.' });
     }
 
-    // Check if email matches
     if (user.email !== decoded.email) {
       return res.status(400).json({ message: 'Invalid verification token.' });
     }
 
-    // Check if already verified
     if (user.emailVerified) {
       return res.status(400).json({ 
         message: 'Email is already verified.',
@@ -33,19 +30,15 @@ export const verifyEmail = async (req, res) => {
       });
     }
 
-    // Mark email as verified
     await user.markEmailAsVerified();
 
-    // Send welcome email
     try {
       const { sendWelcomeEmail } = await import('../services/emailService.js');
       await sendWelcomeEmail(user);
     } catch (emailError) {
       console.error('Failed to send welcome email:', emailError);
-      // Don't fail the verification if welcome email fails
     }
 
-    // Generate tokens for immediate login
     const { accessToken, refreshToken } = generateTokens(user._id);
 
     // Add refresh token to user
@@ -89,7 +82,6 @@ export const resendVerification = async (req, res) => {
       return res.status(404).json({ message: 'No account found with this email address.' });
     }
 
-    // Check if already verified
     if (user.emailVerified) {
       return res.status(400).json({ 
         message: 'Email is already verified.',
@@ -106,7 +98,6 @@ export const resendVerification = async (req, res) => {
       });
     }
 
-    // Send new verification email
     await sendVerificationEmail(user);
 
     res.json({ 
