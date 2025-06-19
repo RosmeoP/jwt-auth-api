@@ -20,6 +20,10 @@ const userSchema = new Schema({
       return this.authProvider === 'local';
     },
   },
+  refreshTokens: {
+    type: [String],
+    default: []
+  },
   googleId: {
     type: String,
     sparse: true,
