@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import isLoggedIn from '../middleware/user.auth.js'; 
 import { refreshTokenController } from '../controllers/authController.js';
 import passport from '../config/passport.js';
-import { sendVerificationEmail, sendWelcomeEmail, verifyEmailToken } from '../services/emailService.js';
+import { sendVerificationEmail, sendWelcomeEmail, sendPasswordResetEmail, verifyEmailToken } from '../services/emailService.js';
 
 const router = Router();
 
@@ -465,6 +465,253 @@ router.post('/logout', isLoggedIn, async (req, res) => {
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ message: 'Logout failed' });
+  }
+});
+
+/**
+ * @swagger
+ * /update-email:
+ *   put:
+ *     summary: Update user email (for local auth users only)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Email updated successfully
+ *       400:
+ *         description: Invalid email or Google user trying to update
+ *       409:
+ *         description: Email already exists
+ *       500:
+ *         description: Server error
+ */
+router.put('/update-email', isLoggedIn, async (req, res) => {
+  try {
+    const { email } = req.body;
+    const userId = req.user.id;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    // Get the current user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Check if user is Google user (can't update email)
+    if (user.googleId || user.authProvider === 'google') {
+      return res.status(400).json({ 
+        message: 'Google users cannot update their email address. Email is managed by Google.' 
+      });
+    }
+
+    const trimmedEmail = email.toLowerCase().trim();
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      return res.status(400).json({ message: 'Please enter a valid email address' });
+    }
+
+    // Check if email is the same as current
+    if (user.email === trimmedEmail) {
+      return res.status(400).json({ message: 'This is already your current email address' });
+    }
+
+    // Check if email already exists
+    const existingUser = await User.findOne({ email: trimmedEmail });
+    if (existingUser) {
+      return res.status(409).json({ message: 'An account with this email already exists' });
+    }
+
+    // Update email and mark as unverified
+    user.email = trimmedEmail;
+    user.emailVerified = false;
+    user.emailVerifiedAt = null;
+    await user.save();
+
+    // Send verification email to new address
+    try {
+      await sendVerificationEmail(user);
+    } catch (emailError) {
+      console.error('Failed to send verification email:', emailError);
+      // Don't fail the update if email sending fails
+    }
+
+    res.json({ 
+      message: 'Email updated successfully! Please check your new email address to verify it.',
+      newEmail: trimmedEmail,
+      requiresVerification: true
+    });
+
+  } catch (error) {
+    console.error('Email update error:', error);
+    res.status(500).json({ message: 'Server error during email update' });
+  }
+});
+
+/**
+ * @swagger
+ * /forgot-password:
+ *   post:
+ *     summary: Request password reset email
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - email
+ *             properties:
+ *               email:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Password reset email sent
+ *       404:
+ *         description: User not found
+ *       400:
+ *         description: Google user cannot reset password
+ *       500:
+ *         description: Server error
+ */
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({ message: 'Email is required' });
+    }
+
+    const trimmedEmail = email.toLowerCase().trim();
+
+    // Find user by email
+    const user = await User.findOne({ email: trimmedEmail });
+    if (!user) {
+      // Don't reveal if email exists or not for security
+      return res.json({ 
+        message: 'If an account with that email exists, we have sent a password reset link.' 
+      });
+    }
+
+    // Check if user is Google user (can't reset password)
+    if (user.googleId || user.authProvider === 'google') {
+      return res.status(400).json({ 
+        message: 'Google users cannot reset their password. Please sign in with Google.' 
+      });
+    }
+
+    // Generate password reset token
+    const resetToken = user.createPasswordResetToken();
+    await user.save();
+
+    // Send password reset email
+    try {
+      await sendPasswordResetEmail(user, resetToken);
+      
+      res.json({ 
+        message: 'If an account with that email exists, we have sent a password reset link.' 
+      });
+    } catch (emailError) {
+      console.error('Failed to send password reset email:', emailError);
+      
+      // Clear the reset token if email fails
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
+      await user.save();
+      
+      res.status(500).json({ 
+        message: 'Failed to send password reset email. Please try again.' 
+      });
+    }
+
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ message: 'Server error during password reset request' });
+  }
+});
+
+/**
+ * @swagger
+ * /reset-password:
+ *   post:
+ *     summary: Reset password with token
+ *     tags: [Auth]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - token
+ *               - password
+ *             properties:
+ *               token:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       400:
+ *         description: Invalid or expired token
+ *       500:
+ *         description: Server error
+ */
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ message: 'Token and password are required' });
+    }
+
+    if (password.length < 8) {
+      return res.status(400).json({ message: 'Password must be at least 8 characters long' });
+    }
+
+    // Find user with valid reset token
+    const user = await User.findOne({
+      passwordResetToken: token,
+      passwordResetExpires: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ 
+        message: 'Invalid or expired password reset token. Please request a new password reset.' 
+      });
+    }
+
+    // Update password and clear reset token
+    user.password = password; // Will be hashed by the pre-save hook
+    user.passwordResetToken = undefined;
+    user.passwordResetExpires = undefined;
+    await user.save();
+
+    res.json({ 
+      message: 'Password reset successfully! You can now log in with your new password.' 
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ message: 'Server error during password reset' });
   }
 });
 

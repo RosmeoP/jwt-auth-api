@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 const { Schema } = mongoose;
 
@@ -12,60 +13,53 @@ const userSchema = new Schema({
     type: String,
     required: true,
     unique: true,
-    lowercase: true,
-    trim: true,
   },
   password: {
     type: String,
     required: function() {
-      return !this.googleId;
-    }
+      return this.authProvider === 'local';
+    },
   },
-  refreshTokens: {
-    type: [String],
-    default: [],
-  },
-  googleId: { 
-    type: String, 
-    unique: true, 
-    sparse: true
+  googleId: {
+    type: String,
+    sparse: true,
   },
   profilePicture: {
     type: String,
-    default: null
-  },
-  emailVerified: {
-    type: Boolean,
-    default: false
-  },
-  emailVerificationToken: {
-    type: String,
-    default: null
-  },
-  emailVerificationExpires: {
-    type: Date,
-    default: null
   },
   authProvider: {
     type: String,
     enum: ['local', 'google'],
-    default: 'local'
+    default: 'local',
   },
-  createdAt: {
-    type: Date,
-    default: Date.now
+  emailVerified: {
+    type: Boolean,
+    default: false,
   },
-  emailVerifiedAt: {
-    type: Date,
-    default: null
+  // Add these password reset fields
+  passwordResetToken: {
+    type: String,
   },
-  lastLoginAt: {
+  passwordResetExpires: {
     type: Date,
-    default: null
-  }
+  },
 }, {
-  timestamps: true
+  timestamps: true,
 });
+
+// Add the password reset token generation method
+userSchema.methods.createPasswordResetToken = function() {
+  const resetToken = crypto.randomBytes(32).toString('hex');
+  
+  this.passwordResetToken = crypto
+    .createHash('sha256')
+    .update(resetToken)
+    .digest('hex');
+  
+  this.passwordResetExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+  
+  return resetToken;
+};
 
 userSchema.methods.comparePassword = async function(candidatePassword) {
   if (!this.password) return false;

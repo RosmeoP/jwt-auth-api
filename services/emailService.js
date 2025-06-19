@@ -202,9 +202,84 @@ export const sendWelcomeEmail = async (user) => {
   }
 };
 
+// Send password reset email
+export const sendPasswordResetEmail = async (user, resetToken) => {
+  const transporter = createTransporter();
+  
+  const resetURL = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+  
+  const resetHTML = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Reset Your Password - KashKeeper</title>
+    </head>
+    <body style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background-color: #f8f9fa; margin: 0; padding: 0;">
+        <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); overflow: hidden;">
+            <!-- Header -->
+            <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center;">
+                <h1 style="margin: 0; font-size: 28px; font-weight: 700;">🔒 Password Reset</h1>
+                <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">Reset your KashKeeper password</p>
+            </div>
+            
+            <!-- Content -->
+            <div style="padding: 40px 30px;">
+                <p style="font-size: 18px; margin-bottom: 20px;">Hi <strong>${user.name}</strong>,</p>
+                
+                <p style="font-size: 16px; margin-bottom: 25px;">
+                    We received a request to reset your password for your KashKeeper account. Click the button below to create a new password:
+                </p>
+                
+                <div style="text-align: center; margin: 35px 0;">
+                    <a href="${resetURL}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; padding: 15px 30px; border-radius: 8px; font-weight: 600; font-size: 16px; box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3); transition: all 0.3s ease;">
+                        Reset My Password 🔑
+                    </a>
+                </div>
+                
+                <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 20px; margin: 25px 0;">
+                    <p style="margin: 0; font-size: 14px; color: #856404;">
+                        <strong>⚠️ Security Notice:</strong><br>
+                        This link will expire in 1 hour for your security. If you didn't request this password reset, please ignore this email.
+                    </p>
+                </div>
+                
+                <p style="font-size: 14px; color: #6c757d; margin-top: 30px;">
+                    If the button doesn't work, copy and paste this link into your browser:<br>
+                    <span style="word-break: break-all; color: #667eea;">${resetURL}</span>
+                </p>
+                
+                <hr style="border: none; border-top: 1px solid #e9ecef; margin: 30px 0;">
+                
+                <p style="font-size: 14px; color: #6c757d; margin: 0;">
+                    Best regards,<br>
+                    The KashKeeper Team<br>
+                    <a href="${process.env.FRONTEND_URL}" style="color: #667eea;">KashKeeper.com</a>
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+    
+  const mailOptions = {
+    from: {
+      name: 'KashKeeper Security',
+      address: process.env.EMAIL_FROM || process.env.EMAIL_USER
+    },
+    to: user.email,
+    subject: '🔒 Reset Your KashKeeper Password',
+    html: resetHTML
+  };
+  
+  await transporter.sendMail(mailOptions);
+};
+
 export default {
   sendVerificationEmail,
   sendWelcomeEmail,
+  sendPasswordResetEmail,
   generateVerificationToken,
   verifyEmailToken
 };
